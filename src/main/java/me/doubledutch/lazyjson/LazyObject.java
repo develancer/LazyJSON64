@@ -1,17 +1,17 @@
 package me.doubledutch.lazyjson;
 
-import me.doubledutch.lazyjson.compressor.DictionaryCache;
-import me.doubledutch.lazyjson.compressor.Template;
+import java.io.File;
+import java.io.IOException;
 import java.util.Iterator;
 import java.util.HashSet;
 import java.util.Set;
-import java.nio.ByteBuffer;
 
 /**
  * An object used to parse and inspect JSON data given in the form of a string.
  */
 public class LazyObject extends LazyElement{
 	public static final Object NULL=new Object();
+
 	/**
 	 * Create a new Lazy JSON object based on the JSON representation in the given string.
 	 *
@@ -19,29 +19,32 @@ public class LazyObject extends LazyElement{
 	 * @throws LazyException if the string could not be parsed as a JSON object
 	 */
 	public LazyObject(String raw) throws LazyException{
-		LazyParser parser=new LazyParser(raw);
-		parser.tokenize();	
+		this(new StringCharSource(raw));
+	}
+
+	/**
+	 * Create a new Lazy JSON object based on the JSON representation in the given file.
+	 *
+	 * @param file the input file
+	 * @throws IOException if the file could not be opened or read
+	 * @throws LazyException if the file's contents could not be parsed as a JSON object
+	 */
+	public LazyObject(File file) throws LazyException, IOException{
+		this(new FileCharSource(file));
+	}
+
+	protected LazyObject(CharSource source) {
+		LazyParser parser=new LazyParser(source);
+		parser.tokenize();
 		if(parser.root.type!=LazyNode.OBJECT){
 			throw new LazyException("JSON Object must start with {",0);
 		}
 		root=parser.root;
-		// source=raw;
 	}
-
-	public LazyObject() throws LazyException{
-		LazyParser parser=new LazyParser("{}");
-		parser.tokenize();	
-		root=parser.root;
-	}
-
-	// protected LazyObject(LazyNode root,char[] source){
-	//	super(root,source,null);
-	// }
 
 	protected LazyObject(LazyNode root){
 		super(root);
 	}
-
 
 	/**
 	 * Returns the type of this element.
@@ -120,30 +123,6 @@ public class LazyObject extends LazyElement{
 		return null;
 	}
 
-	public Object remove(String key) throws LazyException{
-		Object obj=opt(key); // TODO: should this be get instead of opt?
-		LazyNode token=getOptionalField(key);
-		if(token!=null){
-			// System.out.println("found the token!");
-			LazyNode pointer=this.root.child;
-			if(pointer==token){
-				root.child=token.next;
-				if(root.lastChild==pointer){
-					root.lastChild=null;
-				}
-			}else{
-				while(pointer!=null){
-					if(pointer.next==token){
-						pointer.next=token.next;
-					}
-					pointer=pointer.next;
-				}
-			}
-			root.dirty=true;
-		}
-		return obj;
-	}
-
 	protected String serializeElementToString(){
 		StringBuilder buf=new StringBuilder();
 		buf.append("{");
@@ -179,151 +158,6 @@ public class LazyObject extends LazyElement{
 		}
 		buf.append("}");
 		return buf.toString();
-	}
-
-	private void attachField(String key,LazyNode child) throws LazyException{
-		// TODO: change to avoid this constant check
-		StringBuilder dirtyBuf=root.getDirtyBuf();
-		LazyNode token=getOptionalField(key);
-		if(token==null){
-			// new field
-			token=LazyNode.cField(dirtyBuf.length());
-			token.dirty=true;
-			token.dirtyBuf=dirtyBuf;
-			// TODO: we should be encoding the value
-			dirtyBuf.append(key);
-			token.endIndex=dirtyBuf.length();
-			if(root.child==null){
-				root.child=token;
-				root.lastChild=token;
-			}else{
-				root.lastChild.next=token;
-				root.lastChild=token;
-			}
-		}
-		token.child=child;
-		token.lastChild=child;
-	}
-
-	public LazyObject put(String key,String value) throws LazyException{
-		if(value==null){
-			remove(key);
-			return this;
-		}
-		LazyNode child=null;
-		if(shouldQuoteString(value)){
-			child=appendAndSetDirtyString(LazyNode.VALUE_ESTRING,quoteString(value));
-		}else{
-			child=appendAndSetDirtyString(LazyNode.VALUE_STRING,value);
-		}
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,int value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Integer.toString(value));
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,long value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Long.toString(value));
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,float value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Float.toString(value));
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,double value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Double.toString(value));
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,boolean value) throws LazyException{
-		LazyNode child=null;
-		if(value){
-			child=LazyNode.cValueTrue(-1);
-		}else{
-			child=LazyNode.cValueFalse(-1);
-		}
-		child.dirty=true;
-		attachField(key,child);
-		return this;
-	}
-
-	public LazyObject put(String key,LazyObject value) throws LazyException{
-		attachField(key,value.root);
-		/*if(value.cbuf==cbuf && value.dirtyBuf==dirtyBuf){
-			value.root.dirty=true;
-			attachField(key,value.root);
-		}else if(value.cbuf!=cbuf){
-			// Differen't sources
-			StringBuilder buf=getDirtyBuf();
-			value.root.moveInto(buf,value.cbuf,value.dirtyBuf);
-			value.root.dirty=true;
-			attachField(key,value.root);
-			value.dirtyBuf=buf;
-		}else throw new LazyException("Unknown data merge condition :-( :-( :-(");*/
-		return this;
-	}
-
-	public LazyObject put(String key,LazyArray value) throws LazyException{
-		attachField(key,value.root);
-		/*if(value.cbuf==cbuf && value.dirtyBuf==dirtyBuf){
-			value.root.dirty=true;
-			attachField(key,value.root);
-		}else if(value.cbuf!=cbuf){
-			// Differen't sources
-			StringBuilder buf=getDirtyBuf();
-			value.root.moveInto(buf,value.cbuf,value.dirtyBuf);
-			value.root.dirty=true;
-			attachField(key,value.root);
-			value.dirtyBuf=buf;
-			// System.out.println("not matching put conditions");
-		}else throw new LazyException("Unknown data merge condition :-( :-( :-(");*/
-		return this;
-	}
-
-	public LazyObject put(String key,Object value) throws LazyException{
-		if(value==NULL){
-			LazyNode child=LazyNode.cValueNull(-1);
-			child.dirty=true;
-			attachField(key,child);
-			return this;
-		}else if(value==null){
-			// TODO: remove key instead
-		}
-		// TODO: look into faster ways of branching by type
-		if(value instanceof java.lang.Integer){
-			return put(key,((Integer)value).intValue());
-		}
-		if(value instanceof java.lang.Long){
-			return put(key,((Long)value).longValue());
-		}
-		if(value instanceof java.lang.Float){
-			return put(key,((Float)value).floatValue());
-		}
-		if(value instanceof java.lang.Double){
-			return put(key,((Double)value).doubleValue());
-		}
-		if(value instanceof java.lang.Boolean){
-			return put(key,((Boolean)value).booleanValue());
-		}
-		if(value instanceof java.lang.String){
-			return put(key,(String)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyObject){
-			return put(key,(LazyObject)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyArray){
-			return put(key,(LazyArray)value);
-		}
-		throw new LazyException("Unsupported object type");
 	}
 
 	/**
@@ -710,19 +544,10 @@ public class LazyObject extends LazyElement{
 				return false;
 			}
 			// Now go through the field character for character to compare
-			if(token.dirty){
-				for(int i=0;i<length;i++){
-					char c=key.charAt(i);
-					if(c!=token.dirtyBuf.charAt(token.startIndex+i)){
-						return false;
-					}
-				}
-			}else{
-				for(int i=0;i<length;i++){
-					char c=key.charAt(i);
-					if(c!=token.cbuf[token.startIndex+i]){
-						return false;
-					}
+			for(int i=0;i<length;i++){
+				char c=key.charAt(i);
+				if(c!=token.source.get(token.startIndex+i)){
+					return false;
 				}
 			}
 			return true;

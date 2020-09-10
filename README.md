@@ -1,5 +1,17 @@
-# LazyJSON
-LazyJSON is a very fast JSON parser for Java that sprung out of the [StroomData](https://github.com/doubledutch/StroomData) project at DoubleDutch. You can read more about the origin of the library in [this blogpost](https://content.doubledutch.me/blog/json-parser).
+# LazyJSON64
+This is a fork of the [LazyJSON](https://github.com/doubledutch/LazyJSON) project that focuses on reading large JSON data directly from file, without any need to load the entire contents into memory. It therefore allows to read JSON files larger than 2 GB.
+
+Advantages over original LazyJSON:
+
+* can read files larger than 2 GB
+* has smaller memory footprint
+
+Disadvantages (at the moment):
+
+* when reading directly from file, all text values are read in single-byte Latin-1 (aka ISO-8859-1) encoding
+* the objects are immutable i.e. once read, model cannot be modified
+
+The original LazyJSON is a very fast JSON parser for Java that sprung out of the [StroomData](https://github.com/doubledutch/StroomData) project at DoubleDutch. You can read more about the origin of the library in [this blogpost](https://content.doubledutch.me/blog/json-parser).
 
 [![Maven Central](https://maven-badges.herokuapp.com/maven-central/me.doubledutch/lazyjson/badge.svg)](https://maven-badges.herokuapp.com/maven-central/me.doubledutch/lazyjson)
 [![Javadocs](http://www.javadoc.io/badge/me.doubledutch/lazyjson.svg)](http://www.javadoc.io/doc/me.doubledutch/lazyjson)
@@ -15,6 +27,12 @@ LazyObject obj=new LazyObject(source);
 System.out.println("Hello "+obj.getString("title")+"!");
 // Expected output: "Hello World!"
 ````
+
+You can also read directly from file:
+
+```java
+LazyObject obj=new LazyObject(new File("contents.json"));
+```
 
 The library includes a JSON compression feature that uses template based encoding and caching of repeated string values using an http2 header cache inspired scheme.
 

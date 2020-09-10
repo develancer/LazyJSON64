@@ -1,5 +1,8 @@
 package me.doubledutch.lazyjson;
 
+import java.io.File;
+import java.io.IOException;
+
 /**
  * An array used to parse and inspect JSON data given in the form of a string.
  */
@@ -15,27 +18,32 @@ public class LazyArray extends LazyElement{
 	 * @throws LazyException if the string could not be parsed as a JSON array
 	 */
 	public LazyArray(String raw) throws LazyException{
-		LazyParser parser=new LazyParser(raw);
-		parser.tokenize();	
+		this(new StringCharSource(raw));
+	}
+
+	/**
+	 * Create a new Lazy JSON array based on the JSON representation in the given file.
+	 *
+	 * @param file the input file
+	 * @throws IOException if the file could not be opened or read
+	 * @throws LazyException if the file's contents could not be parsed as a JSON array
+	 */
+	public LazyArray(File file) throws LazyException, IOException{
+		this(new FileCharSource(file));
+	}
+
+	protected LazyArray(CharSource source) throws LazyException{
+		LazyParser parser=new LazyParser(source);
+		parser.tokenize();
 		if(parser.root.type!=LazyNode.ARRAY){
 			throw new LazyException("JSON Array must start with [",0);
 		}
 		root=parser.root;
 	}
 
-	public LazyArray() throws LazyException{
-		LazyParser parser=new LazyParser("[]");
-		parser.tokenize();	
-		root=parser.root;
-	}
-
 	protected LazyArray(LazyNode root){
 		super(root);
 	}
-	/*
-	protected LazyArray(LazyNode root,char[] source){
-		super(root,source,null);
-	}*/
 
 	protected String serializeElementToString(){
 		StringBuilder buf=new StringBuilder();
@@ -180,250 +188,6 @@ public class LazyArray extends LazyElement{
 			}
 		}
 		return null;
-	}
-
-	private void appendChild(LazyNode token) throws LazyException{
-		if(root.child==null){
-			root.child=token;
-			root.lastChild=token;
-		}else{
-			root.lastChild.next=token;
-			root.lastChild=token;
-		}
-		root.dirty=true;
-		selectToken=null;
-		selectInt=-1;
-	}
-
-	private void insertChild(int index,LazyNode token) throws LazyException{
-		root.dirty=true;
-		if(index==0){
-			token.next=root.child;
-			root.child=token;
-			return;
-		}
-		int current=1;
-		LazyNode pointer=root.child;
-		if(pointer==null)throw new LazyException("Trying to put at index "+index+" on an empty LazyArray");
-		while(current<index){
-			current++;
-			pointer=pointer.next;
-			if(pointer==null)throw new LazyException("Index out of bounds "+index);
-		}
-		token.next=pointer.next;
-		pointer.next=token;
-		selectToken=null;
-		selectInt=-1;
-	}
-
-	public LazyArray put(String value) throws LazyException{
-		LazyNode child=null;
-		if(shouldQuoteString(value)){
-			child=appendAndSetDirtyString(LazyNode.VALUE_ESTRING,quoteString(value));
-		}else{
-			child=appendAndSetDirtyString(LazyNode.VALUE_STRING,value);
-		}
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(int value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Integer.toString(value));
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(long value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Long.toString(value));
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(float value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Float.toString(value));
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(double value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Double.toString(value));
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(boolean value) throws LazyException{
-		LazyNode child=null;
-		if(value){
-			child=LazyNode.cValueTrue(-1);
-		}else{
-			child=LazyNode.cValueFalse(-1);
-		}
-		child.dirty=true;
-		appendChild(child);
-		return this;
-	}
-
-	public LazyArray put(LazyArray value) throws LazyException{
-		appendChild(value.root);
-		return this;
-	}
-
-	public LazyArray put(LazyObject value) throws LazyException{
-		appendChild(value.root);
-		return this;
-	}
-
-	public LazyArray put(Object value) throws LazyException{
-		if(value==LazyObject.NULL){
-			LazyNode child=LazyNode.cValueNull(-1);
-			child.dirty=true;
-			appendChild(child);
-			return this;
-		}else if(value==null){
-			// TODO: hmmm... maybe throw exception? or also put LazyObject.NULL?
-		}
-		if(value instanceof java.lang.Integer){
-			return put(((Integer)value).intValue());
-		}
-		if(value instanceof java.lang.Long){
-			return put(((Long)value).longValue());
-		}
-		if(value instanceof java.lang.Float){
-			return put(((Float)value).floatValue());
-		}
-		if(value instanceof java.lang.Double){
-			return put(((Double)value).doubleValue());
-		}
-		if(value instanceof java.lang.Boolean){
-			return put(((Boolean)value).booleanValue());
-		}
-		if(value instanceof java.lang.String){
-			return put((String)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyObject){
-			return put((LazyObject)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyArray){
-			return put((LazyArray)value);
-		}
-		throw new LazyException("Unsupported object type");
-	}
-
-	public LazyArray put(int index,Object value) throws LazyException{
-		if(value==LazyObject.NULL){
-			LazyNode child=LazyNode.cValueNull(-1);
-			child.dirty=true;
-			insertChild(index,child);
-			return this;
-		}else if(value==null){
-			// TODO: hmmm... maybe throw exception? or also put LazyObject.NULL?
-		}
-		if(value instanceof java.lang.Integer){
-			return put(index,((Integer)value).intValue());
-		}
-		if(value instanceof java.lang.Long){
-			return put(index,((Long)value).longValue());
-		}
-		if(value instanceof java.lang.Float){
-			return put(index,((Float)value).floatValue());
-		}
-		if(value instanceof java.lang.Double){
-			return put(index,((Double)value).doubleValue());
-		}
-		if(value instanceof java.lang.Boolean){
-			return put(index,((Boolean)value).booleanValue());
-		}
-		if(value instanceof java.lang.String){
-			return put(index,(String)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyObject){
-			return put(index,(LazyObject)value);
-		}
-		if(value instanceof me.doubledutch.lazyjson.LazyArray){
-			return put(index,(LazyArray)value);
-		}
-		throw new LazyException("Unsupported object type");
-	}
-
-	public LazyArray put(int index,String value) throws LazyException{
-		LazyNode child=null;
-		if(shouldQuoteString(value)){
-			child=appendAndSetDirtyString(LazyNode.VALUE_ESTRING,quoteString(value));
-		}else{
-			child=appendAndSetDirtyString(LazyNode.VALUE_STRING,value);
-		}
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,int value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Integer.toString(value));
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,long value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_INTEGER,Long.toString(value));
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,float value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Float.toString(value));
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,double value) throws LazyException{
-		LazyNode child=appendAndSetDirtyString(LazyNode.VALUE_FLOAT,Double.toString(value));
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,boolean value) throws LazyException{
-		LazyNode child=null;
-		if(value){
-			child=LazyNode.cValueTrue(-1);
-		}else{
-			child=LazyNode.cValueFalse(-1);
-		}
-		child.dirty=true;
-		insertChild(index,child);
-		return this;
-	}
-
-	public LazyArray put(int index,LazyArray value) throws LazyException{
-		insertChild(index,value.root);
-		return this;
-	}
-
-	public LazyArray put(int index,LazyObject value) throws LazyException{
-		insertChild(index,value.root);
-		return this;
-	}
-
-	public Object remove(int index) throws LazyException{
-		Object obj=opt(index); // TODO: should this be get instead of opt?
-		LazyNode token=getOptionalValueToken(index);
-		if(token!=null){
-			// System.out.println("found the token!");
-			LazyNode pointer=this.root.child;
-			if(pointer==token){
-				// System.out.println("yes, it was the first");
-				root.child=token.next;
-			}else{
-				while(pointer!=null){
-					if(pointer.next==token){
-						pointer.next=token.next;
-					}
-					pointer=pointer.next;
-				}
-			}
-			root.dirty=true;
-		}
-		selectToken=null;
-		selectInt=-1;
-		return obj;
 	}
 
 	/**

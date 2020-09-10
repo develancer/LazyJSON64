@@ -27,15 +27,13 @@ public final class LazyNode{
 
 	protected byte type;
 
-	protected boolean dirty=false;
-	protected char[] cbuf=null;
-	protected StringBuilder dirtyBuf=null;
+	protected CharSource source=null;
 
 	// Start and end index into source string for this token.
 	// For an object or array, the end index will be the end of the entire
 	// object or array.
-	protected int startIndex;
-	protected int endIndex=-1;
+	protected long startIndex;
+	protected long endIndex=-1;
 
 	// Children are stored as a linked list by maintaining the first and last
 	// child of this token, as well as a link to the next sibling
@@ -49,47 +47,9 @@ public final class LazyNode{
 	 * @param type the type of this token
 	 * @param startIndex the index into the source string where this token was found
 	 */
-	protected LazyNode(byte type,int startIndex){
+	protected LazyNode(byte type,long startIndex){
 		this.startIndex=startIndex;
 		this.type=type;
-	}
-
-	protected StringBuilder getDirtyBuf(){
-		if(dirtyBuf==null){
-			dirtyBuf=new StringBuilder();
-		}
-		return dirtyBuf;
-	}
-
-	/*
-	protected void moveInto(StringBuilder buf,char[] source,StringBuilder dirtyBuf){
-		if(endIndex>-1 && type!=OBJECT && type!=ARRAY){
-			int newIndex=buf.length();
-			buf.append(getStringValue(source,dirtyBuf));
-			startIndex=newIndex;
-			endIndex=buf.length();
-		}
-		dirty=true;
-		LazyNode pointer=child;
-		while(pointer!=null){
-			pointer.moveInto(buf,source,dirtyBuf);
-			pointer=pointer.next;
-		}
-	}*/
-
-	protected boolean isDirty(){
-		if(dirty){
-			return true;
-		}
-		if(child==null){
-			return false;
-		}
-		LazyNode pointer=child;
-		while(pointer!=null){
-			if(pointer.isDirty())return true;
-			pointer=pointer.next;
-		}
-		return false;
 	}
 
 	/**
@@ -131,7 +91,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cArray(int index){
+	protected static LazyNode cArray(long index){
 		return new LazyNode(ARRAY,index);
 	}
 
@@ -142,7 +102,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cObject(int index){
+	protected static LazyNode cObject(long index){
 		return new LazyNode(OBJECT,index);
 	}
 
@@ -153,7 +113,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cField(int index){
+	protected static LazyNode cField(long index){
 		return new LazyNode(FIELD,index);
 	}
 
@@ -164,7 +124,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cStringValue(int index){
+	protected static LazyNode cStringValue(long index){
 		return new LazyNode(VALUE_STRING,index);
 	}
 
@@ -175,7 +135,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cNumberValue(int index){
+	protected static LazyNode cNumberValue(long index){
 		return new LazyNode(VALUE_INTEGER,index);
 	}
 
@@ -186,7 +146,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cValueTrue(int index){
+	protected static LazyNode cValueTrue(long index){
 		return new LazyNode(VALUE_TRUE,index);
 	}
 
@@ -197,7 +157,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cValueFalse(int index){
+	protected static LazyNode cValueFalse(long index){
 		return new LazyNode(VALUE_FALSE,index);
 	}
 
@@ -208,7 +168,7 @@ public final class LazyNode{
 	 * @param index the starting index for this token
 	 * @return a new token
 	 */
-	protected static LazyNode cValueNull(int index){
+	protected static LazyNode cValueNull(long index){
 		return new LazyNode(VALUE_NULL,index);
 	}
 	/*
@@ -224,33 +184,20 @@ public final class LazyNode{
 	 * @throws LazyException if the value could not be parsed
 	 */
 	protected int getIntValue() throws LazyException{
-		int i=startIndex;
+		long i=startIndex;
 		boolean sign=false;
 		int value=0;
 		if(type==VALUE_FLOAT){
 			return (int)getDoubleValue();
 		}else if(type==VALUE_STRING || type==VALUE_ESTRING){
 			// Attempt to parse as an int, throw if impossible
-			if(dirty){
-				if(dirtyBuf.charAt(i)=='-'){
+			{
+				if(source.get(i)=='-'){
 					sign=true;
 					i++;
 				}
 				for(;i<endIndex;i++){
-					char c=dirtyBuf.charAt(i);
-					if(c<'0'||c>'9')throw new LazyException("'"+getStringValue()+"' is not a valid integer",startIndex);
-					value+='0'-c;
-					if(i+1<endIndex){
-						value*=10;
-					}
-				}
-			}else{	
-				if(cbuf[i]=='-'){
-					sign=true;
-					i++;
-				}
-				for(;i<endIndex;i++){
-					char c=cbuf[i];
+					char c=source.get(i);
 					if(c<'0'||c>'9')throw new LazyException("'"+getStringValue()+"' is not a valid integer",startIndex);
 					value+='0'-c;
 					if(i+1<endIndex){
@@ -260,27 +207,13 @@ public final class LazyNode{
 			}
 			return sign?value:-value;
 		}else if(type==VALUE_INTEGER){
-			if(dirty){
-				if(dirtyBuf.charAt(i)=='-'){
+			{
+				if(source.get(i)=='-'){
 					sign=true;
 					i++;
 				}
 				for(;i<endIndex;i++){
-					char c=dirtyBuf.charAt(i);
-					// If we only allow this to be called on integer values, the parsing is pre done!
-					// if(c<'0'||c>'9')throw new LazyException("'"+getStringValue(source)+"' is not a valid integer",startIndex);
-					value+='0'-c;
-					if(i+1<endIndex){
-						value*=10;
-					}
-				}
-			}else{	
-				if(cbuf[i]=='-'){
-					sign=true;
-					i++;
-				}
-				for(;i<endIndex;i++){
-					char c=cbuf[i];
+					char c=source.get(i);
 					// If we only allow this to be called on integer values, the parsing is pre done!
 					// if(c<'0'||c>'9')throw new LazyException("'"+getStringValue(source)+"' is not a valid integer",startIndex);
 					value+='0'-c;
@@ -302,33 +235,20 @@ public final class LazyNode{
 	 * @throws LazyException if the value could not be parsed
 	 */
 	protected long getLongValue() throws LazyException{
-		int i=startIndex;
+		long i=startIndex;
 		boolean sign=false;
 		long value=0;
 		if(type==VALUE_FLOAT){
 			return (long)getDoubleValue();
 		}else if(type==VALUE_STRING || type==VALUE_ESTRING){
 			// Attempt to parse as an int, throw if impossible
-			if(dirty){
-				if(dirtyBuf.charAt(i)=='-'){
+			{
+				if(source.get(i)=='-'){
 					sign=true;
 					i++;
 				}
 				for(;i<endIndex;i++){
-					char c=dirtyBuf.charAt(i);
-					if(c<'0'||c>'9')throw new LazyException("'"+getStringValue()+"' is not a valid long",startIndex);
-					value+='0'-c;
-					if(i+1<endIndex){
-						value*=10;
-					}
-				}
-			}else{	
-				if(cbuf[i]=='-'){
-					sign=true;
-					i++;
-				}
-				for(;i<endIndex;i++){
-					char c=cbuf[i];
+					char c=source.get(i);
 					if(c<'0'||c>'9')throw new LazyException("'"+getStringValue()+"' is not a valid long",startIndex);
 					value+='0'-c;
 					if(i+1<endIndex){
@@ -338,27 +258,13 @@ public final class LazyNode{
 			}
 			return sign?value:-value;
 		}else if(type==VALUE_INTEGER){
-			if(dirty){
-				if(dirtyBuf.charAt(i)=='-'){
+			{
+				if(source.get(i)=='-'){
 					sign=true;
 					i++;
 				}
 				for(;i<endIndex;i++){
-					char c=dirtyBuf.charAt(i);
-					// If we only allow this to be called on integer values, the parsing is pre done!
-					// if(c<'0'||c>'9')throw new LazyException("'"+getStringValue(source)+"' is not a valid integer",startIndex);
-					value+='0'-c;
-					if(i+1<endIndex){
-						value*=10;
-					}
-				}
-			}else{	
-				if(cbuf[i]=='-'){
-					sign=true;
-					i++;
-				}
-				for(;i<endIndex;i++){
-					char c=cbuf[i];
+					char c=source.get(i);
 					// If we only allow this to be called on integer values, the parsing is pre done!
 					// if(c<'0'||c>'9')throw new LazyException("'"+getStringValue(source)+"' is not a valid integer",startIndex);
 					value+='0'-c;
@@ -410,18 +316,19 @@ public final class LazyNode{
 		if(type==VALUE_NULL){
 			return null;
 		}else if(!(type==VALUE_ESTRING||type==EFIELD)){
-			if(dirty){
-				return dirtyBuf.substring(startIndex,endIndex);
-			}
-			return new String(cbuf,startIndex,endIndex-startIndex);
+			return source.substring(startIndex, endIndex);
 		}else{
-			StringBuilder buf=new StringBuilder(endIndex-startIndex);
-			if(dirty){
-				for(int i=startIndex;i<endIndex;i++){
-					char c=dirtyBuf.charAt(i);
+			long length = endIndex - startIndex;
+			if (length > Integer.MAX_VALUE) {
+				throw new LazyException("string value is too long");
+			}
+			StringBuilder buf=new StringBuilder((int) length);
+			{
+				for(long i=startIndex;i<endIndex;i++){
+					char c=source.get(i);
 					if(c=='\\'){
 						i++;
-						c=dirtyBuf.charAt(i);
+						c=source.get(i);
 						if(c=='"' || c=='\\' || c=='/'){
 							buf.append(c);
 						}else if(c=='b'){
@@ -435,34 +342,7 @@ public final class LazyNode{
 						}else if(c=='t'){
 							buf.append('\t');
 						}else if(c=='u'){
-							String code=dirtyBuf.substring(i+1,i+5);
-							buf.append((char)Integer.parseInt(code, 16));
-							i+=4;
-						}
-					}else{
-						buf.append(c);
-					}
-				}
-			}else{
-				for(int i=startIndex;i<endIndex;i++){
-					char c=cbuf[i];
-					if(c=='\\'){
-						i++;
-						c=cbuf[i];
-						if(c=='"' || c=='\\' || c=='/'){
-							buf.append(c);
-						}else if(c=='b'){
-							buf.append('\b');
-						}else if(c=='f'){
-							buf.append('\f');
-						}else if(c=='n'){
-							buf.append('\n');
-						}else if(c=='r'){
-							buf.append('\r');
-						}else if(c=='t'){
-							buf.append('\t');
-						}else if(c=='u'){
-							String code=new String(cbuf,i+1,4);
+							String code = source.substring(i+1, i+5);
 							buf.append((char)Integer.parseInt(code, 16));
 							i+=4;
 						}
@@ -476,11 +356,7 @@ public final class LazyNode{
 	}
 
 	protected String getRawStringValue(){
-		if(dirty){
-			return dirtyBuf.substring(startIndex,endIndex);
-		}else{
-			return new String(cbuf,startIndex,endIndex-startIndex);
-		}
+		return source.substring(startIndex, endIndex);
 	}
 
 	/**
@@ -516,7 +392,6 @@ public final class LazyNode{
 			out+="n";
 		}
 		out+=":["+startIndex+","+endIndex+"]";
-		if(dirty)out+="d";
 		out+="\n";
 		if(child!=null){
 			LazyNode token=child;
@@ -710,8 +585,8 @@ public final class LazyNode{
 	protected static LazyNode readFromBuffer(ByteBuffer buf){
 		byte type=buf.get();
 		if(type==END_MARKER)return null;
-		int startIndex=buf.getInt();
-		int endIndex=buf.getInt();
+		long startIndex=buf.getLong();
+		long endIndex=buf.getLong();
 		// TODO: add constructor for this purpose
 		LazyNode node=new LazyNode(type,startIndex);
 		node.endIndex=endIndex; 
@@ -736,8 +611,8 @@ public final class LazyNode{
 	protected void writeToBuffer(ByteBuffer buf){
 		// ByteBuffer must be allocated with enough space before calling
 		buf.put(type);
-		buf.putInt(startIndex);
-		buf.putInt(endIndex);
+		buf.putLong(startIndex);
+		buf.putLong(endIndex);
 		if(type==OBJECT || type==ARRAY){
 			LazyNode n=child;
 			while(n!=null){
@@ -751,7 +626,7 @@ public final class LazyNode{
 	}
 
 	protected int getBufferSize(){
-		int size=1+4+4; // type, start and end index, modifier
+		int size=1+8+8; // type, start and end index, modifier
 		if(type==OBJECT || type==ARRAY){
 			LazyNode n=child;
 			while(n!=null){

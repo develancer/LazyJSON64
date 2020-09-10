@@ -19,16 +19,6 @@ public abstract class LazyElement{
 
 	}
 
-	protected LazyNode appendAndSetDirtyString(byte type,String value) throws LazyException{
-		StringBuilder dirtyBuf=root.getDirtyBuf();
-		LazyNode child=new LazyNode(type,dirtyBuf.length());
-		dirtyBuf.append(value);
-		child.endIndex=dirtyBuf.length();
-		child.dirty=true;
-		child.dirtyBuf=dirtyBuf;
-		return child;
-	}
-
 	public Template extractTemplate(){
 		Template t=new Template();
 		root.addSegments(t);
@@ -155,11 +145,16 @@ public abstract class LazyElement{
 	 * @return as string representation of this object as given in the source string
 	 */
 	public String toString(){
-		if(root.isDirty()){
-			return serializeElementToString();
-		}else{
-			return new String(root.cbuf,root.startIndex,root.endIndex-root.startIndex);
-		}
+		return root.source.substring(root.startIndex, root.endIndex);
+	}
+
+	/**
+	 * Returns the index of the first character of source string.
+	 *
+	 * @return the position of the source string for this element
+	 */
+	public long getSourceOffset(){
+		return root.startIndex;
 	}
 
 	/**
@@ -167,7 +162,7 @@ public abstract class LazyElement{
 	 * 
 	 * @return the length of the source string for this element
 	 */
-	public int getSourceLength(){
+	public long getSourceLength(){
 		return root.endIndex-root.startIndex;
 	}
 

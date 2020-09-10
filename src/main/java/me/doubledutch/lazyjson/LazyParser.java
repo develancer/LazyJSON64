@@ -1,6 +1,7 @@
 package me.doubledutch.lazyjson;
 
-import java.util.*;
+import java.io.File;
+import java.io.IOException;
 
 public final class LazyParser{
 	private final char CH_SPACE=' ';
@@ -38,14 +39,11 @@ public final class LazyParser{
 	private int STACK_SIZE=32;
 
 	protected LazyNode root;
-	protected final char[] cbuf;
-	protected final int length;
-	private int n=0;
+	protected final CharSource source;
+	private long n=0;
 
-	protected LazyParser(final String source){
-		length=source.length();
-		cbuf=new char[length];
-		source.getChars(0,length,cbuf,0);
+	protected LazyParser(CharSource source){
+		this.source = source;
 	}
 
 	// The parser uses a crude stack while parsing that maintains a reference
@@ -95,10 +93,10 @@ public final class LazyParser{
 
 	// Utility method to consume sections of whitespace
 	private final void consumeWhiteSpace(){
-		char c=cbuf[n];
+		char c=source.get(n);
 		while(c==CH_SPACE|| c==CH_LINEFEED || c==CH_TAB || c==CH_CARRIAGE_RETURN){
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 		}
 	}
 
@@ -116,18 +114,18 @@ public final class LazyParser{
 	private final boolean consumeString() throws LazyException{
 		boolean escaped=false;
 		n++;
-		char c=cbuf[n];
+		char c=source.get(n);
 		while(c!=CH_QUOTE){
 			if(c==CH_BACKSLASH){
 				n++;
-				c=cbuf[n];
+				c=source.get(n);
 				if(!(c==CH_QUOTE || c==CH_BACKSLASH || c==CH_SLASH || c==CH_b || c==CH_f || c==CH_n || c==CH_r || c==CH_t || c==CH_u)){
 					throw new LazyException("Invalid escape code",n);
 				}
 				escaped=true;
 			}
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 		}
 		return escaped;
 	}
@@ -139,7 +137,7 @@ public final class LazyParser{
 		if(c==CH_DASH){
 			// If the number started with a minus sign it must be followed by at least one digit
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 			if(c<CH_0 || c>CH_9){
 				throw new LazyException("Digit expected",n);
 			}
@@ -147,40 +145,40 @@ public final class LazyParser{
 		n++;
 		if(c==CH_0){
 			// First digit was zero - next may not be digit!
-			c=cbuf[n];
+			c=source.get(n);
 			if(c>=CH_0 && c<=CH_9){
 				throw new LazyException("Number may not start with leading zero",n);
 			}
 		}else{
-			c=cbuf[n];
+			c=source.get(n);
 		}
 		while(!(c<CH_0 || c>CH_9)){
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 		}
 		if(c==CH_DOT){
 			floatChar=true;
 			// The fractional part must contain one or more digits
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 			if(c<CH_0 || c>CH_9){
 				throw new LazyException("Digit expected",n);
 			}
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 			while(!(c<CH_0 || c>CH_9)){
 				n++;
-				c=cbuf[n];
+				c=source.get(n);
 			}
 		}
 		if(c==CH_e || c==CH_E){
 			floatChar=true;
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 			if(c==CH_DASH || c==CH_PLUS){
 				// We must have at least one digit following this
 				n++;
-				c=cbuf[n];
+				c=source.get(n);
 				if(c<CH_0 || c>CH_9){
 					throw new LazyException("Digit expected",n);
 				}
@@ -188,10 +186,10 @@ public final class LazyParser{
 				throw new LazyException("Exponential part expected",n);
 			}
 			n++;
-			c=cbuf[n];
+			c=source.get(n);
 			while(!(c<CH_0 || c>CH_9)){
 				n++;
-				c=cbuf[n];
+				c=source.get(n);
 			}
 		}
 		return floatChar;
@@ -216,7 +214,7 @@ public final class LazyParser{
 		// We are going to manually push the first token onto the stack so
 		// future push operations can avoid doing an if empty check when
 		// setting the parent child relationship
-		char c=cbuf[n];
+		char c=source.get(n);
 		if(c==CH_BEGIN_CURLY){
 			stack[stackPointer++]=LazyNode.cObject(n);
 		}else if(c==CH_BEGIN_BRACKET){
@@ -230,8 +228,9 @@ public final class LazyParser{
 		boolean expectValue=false;
 		boolean firstValue=true;
 		LazyNode token=null;
+		final long length = source.length();
 		for(;n<length;n++){
-			c=cbuf[n];
+			c=source.get(n);
 			switch(c){
 				case CH_BEGIN_CURLY:
 					push(LazyNode.cObject(n));
@@ -283,7 +282,7 @@ public final class LazyParser{
 					stackTop.endIndex=n;
 					n++;
 					consumeWhiteSpace();
-					c=cbuf[n];
+					c=source.get(n);
 					if(c==CH_COLON){
 						tryToConsumeWhiteSpace();
 					}else{
@@ -357,7 +356,7 @@ public final class LazyParser{
 				expectValue=false;
 				if(c==CH_n){
 					// Must be null value
-					if(cbuf[++n]==CH_u && cbuf[++n]==CH_l && cbuf[++n]==CH_l){
+					if(source.get(++n)==CH_u && source.get(++n)==CH_l && source.get(++n)==CH_l){
 						token=LazyNode.cValueNull(n);
 						stackTop.addChild(token);
 						token.endIndex=n;
@@ -370,7 +369,7 @@ public final class LazyParser{
 					}
 				}else if(c==CH_t){
 					// Must be true value
-					if(cbuf[++n]==CH_r && cbuf[++n]==CH_u && cbuf[++n]==CH_e){
+					if(source.get(++n)==CH_r && source.get(++n)==CH_u && source.get(++n)==CH_e){
 						token=LazyNode.cValueTrue(n);
 						stackTop.addChild(token);
 						token.endIndex=n;
@@ -383,7 +382,7 @@ public final class LazyParser{
 					}
 				}else if(c==CH_f){
 					// Must be false value
-					if(cbuf[++n]==CH_a && cbuf[++n]==CH_l && cbuf[++n]==CH_s && cbuf[++n]==CH_e){
+					if(source.get(++n)==CH_a && source.get(++n)==CH_l && source.get(++n)==CH_s && source.get(++n)==CH_e){
 						token=LazyNode.cValueFalse(n);
 						stackTop.addChild(token);
 						token.endIndex=n;
@@ -420,17 +419,17 @@ public final class LazyParser{
 		if(expectValue){
 			throw new LazyException("Unexpected trailing comma");
 		}
-		setBuffer(root);
+		setSource(root);
 	}
 
-	private void setBuffer(LazyNode node){
-		node.cbuf=cbuf;
+	private void setSource(LazyNode node){
+		node.source=source;
 		LazyNode pointer=node.child;
 		while(pointer!=null){
 			if(pointer.child!=null){
-				setBuffer(pointer);
+				setSource(pointer);
 			}else{
-				pointer.cbuf=cbuf;
+				pointer.source=source;
 			}
 			pointer=pointer.next;
 		}

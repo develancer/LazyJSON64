@@ -77,7 +77,11 @@ public class Compressor{
 		// If the template satisfies our compression criterea - compress
 		if(shouldCompress(t)){
 			try{
-				ByteBuffer buf=ByteBuffer.allocate(elm.getSourceLength()-2);
+				long size = elm.getSourceLength() - 2;
+				if (size > Integer.MAX_VALUE) {
+					throw new LazyException("content is too large for compression");
+				}
+				ByteBuffer buf=ByteBuffer.allocate((int) size);
 				buf.putShort((short)templateSet.get(t));
 				elm.writeTemplateValues(buf,dictionary);
 				int pos=buf.position();

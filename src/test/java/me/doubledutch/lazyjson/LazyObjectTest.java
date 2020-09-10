@@ -60,7 +60,6 @@ public class LazyObjectTest{
         assertFalse(obj1.equals(obj5));
         assertFalse(obj1.equals(obj6));
         assertFalse(obj1.equals("foo"));
-        assertFalse(obj1.equals(new LazyArray()));
     }
 
     @Test

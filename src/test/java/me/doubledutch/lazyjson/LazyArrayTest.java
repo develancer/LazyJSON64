@@ -1,11 +1,7 @@
 package me.doubledutch.lazyjson;
 
-import java.io.File;
 import org.junit.*;
 import static org.junit.Assert.*;
-import java.util.List;
-import java.util.ArrayList;
-import java.net.*;
 
 public class LazyArrayTest{
     @Test
@@ -30,17 +26,6 @@ public class LazyArrayTest{
         LazyArray arr1=new LazyArray(str1);
         LazyArray arr2=new LazyArray(str2);
         assertNotEquals(arr1.hashCode(),arr2.hashCode());
-    }
-
-    @Test
-    public void testRemove() throws LazyException{
-        String str="[2,false,null,true,9]";
-        LazyArray array=new LazyArray(str);
-        array.remove(0);
-        assertEquals(4,array.length());
-        assertEquals(9,array.getInt(3));
-        array.remove(2);
-        assertEquals(9,array.getInt(2));
     }
 
     @Test
@@ -313,13 +298,5 @@ public class LazyArrayTest{
         LazyObject obj2=arr.getJSONObject(0);
         assertNotNull(obj2);
         assertEquals(obj.getString("[]"),"{}");
-    }
-
-    @Test
-    public void testSerializeStringWithEscapedQuotes() {
-        LazyArray lazyArray = new LazyArray();
-        lazyArray.put("\"foo\" bar");
-        lazyArray.put("baz");
-        assertEquals("[\"\\\"foo\\\" bar\",\"baz\"]", lazyArray.toString());
     }
 }
